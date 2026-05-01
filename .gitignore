@@ -1,0 +1,15 @@
+# Dependency directories
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Local env files
+.env
+backend/uploads/
+
+# OS files
+.DS_Store
+*.log
+
+# Build files
+frontend/build/

@@ -1,0 +1,263 @@
+import LiveFeed from "./LiveFeed";
+import { motion } from "framer-motion";
+import MapChart from "./MapChart";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  LineChart,
+  Line,
+  Cell,
+} from "recharts";
+
+function Dashboard({ data }) {
+  if (!data) {
+    return (
+      <div style={{ textAlign: "center", marginTop: "100px" }}>
+        <h2>📂 Upload a log file to start analysis</h2>
+      </div>
+    );
+  }
+
+  const countryData = data.countries || {};
+  const score = Math.max(0, 100 - data.total_threats * 5);
+
+  // 🔥 PRO CARD STYLE (NEON)
+  const cardStyle = {
+    background: "rgba(15, 23, 42, 0.85)",
+    backdropFilter: "blur(14px)",
+    borderRadius: "14px",
+    padding: "20px",
+    border: "1px solid rgba(56,189,248,0.2)",
+    boxShadow: "0 0 20px rgba(56,189,248,0.15)",
+  };
+
+  const timelineData = data.timeline
+    ? Object.entries(data.timeline).map(([hour, count]) => ({
+        hour,
+        count,
+      }))
+    : [];
+
+  const attackTypes = Object.entries(data.attack_types).map(
+    ([key, value]) => ({
+      name: key,
+      count: value,
+    })
+  );
+
+  const severityData = data.severity
+    ? Object.entries(data.severity).map(([key, value]) => ({
+        name: key,
+        count: value,
+      }))
+    : [];
+
+  return (
+    <div style={{ marginTop: "20px", padding: "20px" }}>
+
+      {/* 🔥 HEADER */}
+      <h1
+        style={{
+          textAlign: "center",
+          fontSize: "32px",
+          background: "linear-gradient(to right, #38bdf8, #22c55e)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+        }}
+      >
+        🛡 LogLens - SIEM Dashboard
+      </h1>
+
+      {/* 🔐 SECURITY SCORE */}
+      <div style={{ textAlign: "center", marginTop: "10px" }}>
+        <h2 style={{ color: score < 50 ? "#ef4444" : "#22c55e" }}>
+          🔐 Security Score: {score}/100
+        </h2>
+
+        {/* 🔥 PROGRESS BAR */}
+        <div
+          style={{
+            width: "300px",
+            height: "8px",
+            background: "#1e293b",
+            borderRadius: "10px",
+            margin: "10px auto",
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              width: `${score}%`,
+              height: "100%",
+              background: score < 50 ? "#ef4444" : "#22c55e",
+              transition: "0.5s",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 🔥 STATS */}
+      <div
+        style={{
+          display: "flex",
+          gap: "20px",
+          justifyContent: "center",
+          marginTop: "20px",
+          flexWrap: "wrap",
+        }}
+      >
+        {[
+          { label: "Total Logs", value: data.total_logs, color: "#38bdf8" },
+          { label: "Total Threats", value: data.total_threats, color: "#ef4444" },
+          {
+            label: "Top Attack",
+            value: Object.keys(data.attack_types)[0],
+            color: "#22c55e",
+          },
+        ].map((item, i) => (
+          <motion.div
+            key={i}
+            whileHover={{ scale: 1.07 }}
+            style={{
+              ...cardStyle,
+              textAlign: "center",
+              minWidth: "160px",
+              border: `1px solid ${item.color}55`,
+            }}
+          >
+            <h4>{item.label}</h4>
+            <h2 style={{ color: item.color }}>{item.value}</h2>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* GRID */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+          gap: "20px",
+          marginTop: "30px",
+        }}
+      >
+        {/* Attack Types */}
+        <motion.div whileHover={{ scale: 1.02 }} style={cardStyle}>
+          <h3>📊 Attack Types</h3>
+          <BarChart width={400} height={250} data={attackTypes}>
+            <XAxis dataKey="name" stroke="#94a3b8" />
+            <YAxis stroke="#94a3b8" />
+            <Tooltip />
+            <Bar dataKey="count" fill="#38bdf8" radius={[6, 6, 0, 0]} />
+          </BarChart>
+        </motion.div>
+
+        {/* Timeline */}
+        <motion.div whileHover={{ scale: 1.02 }} style={cardStyle}>
+          <h3>📈 Attacks Per Hour</h3>
+          <LineChart width={400} height={250} data={timelineData}>
+            <XAxis dataKey="hour" stroke="#94a3b8" />
+            <YAxis stroke="#94a3b8" />
+            <Tooltip />
+            <Line
+              type="monotone"
+              dataKey="count"
+              stroke="#22c55e"
+              strokeWidth={3}
+              dot={{ r: 6, fill: "#22c55e" }}
+            />
+          </LineChart>
+        </motion.div>
+      </div>
+
+      {/* 🔥 SEVERITY */}
+      <motion.div style={{ marginTop: "30px", ...cardStyle }}>
+        <h3>🚨 Severity Distribution</h3>
+
+        <BarChart width={400} height={250} data={severityData}>
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="count">
+            {severityData.map((entry, index) => (
+              <Cell
+                key={index}
+                fill={
+                  entry.name === "high"
+                    ? "#ef4444"
+                    : entry.name === "medium"
+                    ? "#f59e0b"
+                    : "#22c55e"
+                }
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </motion.div>
+
+      {/* 🌍 MAP */}
+      <motion.div style={{ marginTop: "30px", ...cardStyle }}>
+        <h3>🌍 Global Attack Map</h3>
+
+        <div
+          style={{
+            width: "100%",
+            height: "420px",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <MapChart data={countryData} />
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: "10px" }}>
+          <span style={{ color: "#22c55e" }}>● Low </span>
+          <span style={{ color: "#f59e0b", marginLeft: "10px" }}>
+            ● Medium
+          </span>
+          <span style={{ color: "#ef4444", marginLeft: "10px" }}>
+            ● High
+          </span>
+        </div>
+      </motion.div>
+
+      {/* 🔥 TABLE */}
+      <motion.div style={{ marginTop: "30px", ...cardStyle }}>
+        <h3>🚨 Top Attackers</h3>
+
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            marginTop: "10px",
+          }}
+        >
+          <thead>
+            <tr style={{ color: "#38bdf8" }}>
+              <th style={{ padding: "10px" }}>IP Address</th>
+              <th>Attacks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(data.top_attackers).map(([ip, count], i) => (
+              <tr
+                key={ip}
+                style={{
+                  background: i % 2 === 0 ? "#0f172a" : "transparent",
+                }}
+              >
+                <td style={{ padding: "10px", color: "#f87171" }}>{ip}</td>
+                <td>{count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </motion.div>
+    </div>
+  );
+}
+
+export default Dashboard;
