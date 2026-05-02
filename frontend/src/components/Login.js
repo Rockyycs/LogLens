@@ -6,13 +6,19 @@ const Login = ({ setToken }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // We are replacing localhost with your live Render backend URL
+    const API_URL = "https://loglens-c3ws.onrender.com/api/login";
+
     try {
-      const res = await fetch("http://localhost:5000/api/login", {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: user, password: pass })
       });
+      
       const data = await res.json();
+      
       if (data.token) {
         localStorage.setItem("loglens_token", data.token);
         setToken(data.token);
@@ -20,7 +26,8 @@ const Login = ({ setToken }) => {
         alert("ACCESS DENIED: Invalid Credentials");
       }
     } catch (err) {
-      alert("Auth Engine Offline");
+      console.error("Connection Error:", err);
+      alert("Auth Engine Offline: Could not reach the security server.");
     }
   };
 
