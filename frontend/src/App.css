@@ -1,38 +1,108 @@
+/* --- CYBER-SOC MASTER THEME --- */
+
+:root {
+  --neon-cyan: #00f2fe;
+  --neon-red: #ff4d4d;
+  --neon-amber: #fbbf24;
+  --dark-bg: #05070a;
+  --card-bg: rgba(15, 23, 42, 0.7);
+  --sidebar-gradient: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+}
+
 .App {
-  text-align: center;
+  text-align: left; /* Changed from center for dashboard layout */
+  background-color: var(--dark-bg);
+  color: #e2e8f0;
+  font-family: 'Inter', -apple-system, sans-serif;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+/* --- SIDEBAR REBRAND & GLOW --- */
+.sidebar {
+  background: var(--sidebar-gradient) !important;
+  border-right: 2px solid var(--neon-cyan) !important;
+  box-shadow: 10px 0 30px rgba(0, 242, 254, 0.1);
+  transition: all 0.3s ease;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+/* This targets the "LOGLENS_v4" text in Dashboard.js */
+.sidebar h2, .sidebar-logo, .logo-text {
+  color: var(--neon-cyan) !important;
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px var(--neon-cyan), 0 0 20px rgba(0, 242, 254, 0.4);
+  margin-bottom: 2rem;
+  padding: 10px;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+/* Sidebar Menu Items */
+.sidebar-link, .nav-item {
+  color: #94a3b8;
+  padding: 12px 20px;
+  margin: 5px 15px;
+  border-radius: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
+}
+
+.sidebar-link:hover, .nav-item:hover {
+  background: rgba(0, 242, 254, 0.1);
+  color: white;
+  transform: translateX(8px); /* Slide effect */
+  box-shadow: inset 4px 0 0 var(--neon-cyan);
+}
+
+.sidebar-link.active, .nav-item.active {
+  background: linear-gradient(90deg, rgba(0, 242, 254, 0.15), transparent);
+  border-left: 4px solid var(--neon-cyan);
   color: white;
 }
 
-.App-link {
-  color: #61dafb;
+/* --- DASHBOARD CARD GLOW UP --- */
+.card, .card-stat {
+  background: var(--card-bg) !important;
+  backdrop-filter: blur(12px); /* Glassmorphism */
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s ease, border 0.3s ease;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.card:hover {
+  transform: translateY(-5px);
+  border: 1px solid rgba(0, 242, 254, 0.3) !important;
+}
+
+/* --- BUTTONS --- */
+button {
+  background: rgba(0, 242, 254, 0.1) !important;
+  border: 1px solid var(--neon-cyan) !important;
+  color: var(--neon-cyan) !important;
+  text-transform: uppercase;
+  font-weight: bold;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--neon-cyan) !important;
+  color: #000 !important;
+  box-shadow: 0 0 15px var(--neon-cyan);
+}
+
+/* --- LIVE SOC STREAM PULSE --- */
+.soc-stream-entry {
+  border-left: 2px solid var(--neon-cyan);
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 5px;
+  padding: 8px;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }

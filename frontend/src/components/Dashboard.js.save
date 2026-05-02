@@ -1,0 +1,369 @@
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import React, { useState, useEffect } from "react";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
+import { toast, ToastContainer } from 'react-toastify'; 
+import 'react-toastify/dist/ReactToastify.css';
+import io from "socket.io-client";
+import MapChart from "./MapChart";
+import LiveFeed from "./LiveFeed";
+
+// Establish Socket Connection
+const socket = io("http://localhost:5000");
+
+// 1. GLOBAL THEME & STYLES
+const THEME = {
+  bg: '#0a0b10',
+  surface: '#161b22', 
+  card: '#161b22',
+  accent: '#00f2ff',
+  danger: '#ff4d4d',
+  warning: '#f39c12',
+  text: '#8b949e',
+  border: 'rgba(255, 255, 255, 0.1)'
+};
+
+const cardStyle = {
+  backgroundColor: THEME.card,
+  borderRadius: '12px',
+  padding: '20px',
+  border: `1px solid ${THEME.border}`,
+  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
+  color: 'white'
+};
+
+const btnStyle = {
+  background: THEME.accent,
+  color: "black",
+  padding: "12px 24px",
+  borderRadius: "6px",
+  fontSize: "0.8rem",
+  fontWeight: "bold",
+  cursor: "pointer",
+  border: "none"
+};
+
+const titleStyle = {
+  fontSize: "0.85rem",
+  color: THEME.text,
+  marginBottom: "24px",
+  textTransform: "uppercase",
+  letterSpacing: "1.5px",
+  fontWeight: "bold"
+};
+
+// 2. HELPER COMPONENTS
+// Added handleManualBlock prop to the table
+const TopAttackersTable = ({ ips, blockedIPs, onBlock }) => (
+  <div style={{ width: "100%", marginTop: "10px" }}>
+    <table style={{ width: "100%", borderCollapse: "collapse", color: "#94a3b8", fontSize: "0.85rem" }}>
+      <thead>
+        <tr style={{ borderBottom: `1px solid ${THEME.border}`, textAlign: "left" }}>
+          <th style={{ padding: "12px 8px" }}>IP Address</th>
+          <th style={{ padding: "12px 8px" }}>Origin</th>
+          <th style={{ padding: "12px 8px" }}>Status</th>
+          <th style={{ padding: "12px 8px", textAlign: "right" }}>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {ips && ips.length > 0 ? (
+          ips.slice(0, 5).map((item, idx) => (
+            <tr key={idx} style={{ borderBottom: `1px solid ${THEME.border}`, background: idx % 2 === 0 ? 'transparent' : '#ffffff05' }}>
+              <td style={{ padding: "12px 8px", color: "white", fontFamily: "monospace" }}>{item.ip}</td>
+              <td style={{ padding: "12px 8px" }}>{item.country || "Global"}</td>
+              <td style={{ padding: "12px 8px" }}>
+                {blockedIPs.includes(item.ip) ? (
+                    <span style={{ color: THEME.danger, fontSize: "0.7rem", border: `1px solid ${THEME.danger}`, padding: "2px 6px", borderRadius: "4px", background: "rgba(255, 77, 77, 0.1)" }}>DROPPED</span>
+                ) : (
+                    <span style={{ color: THEME.warning, fontSize: "0.7rem", border: `1px solid ${THEME.warning}`, padding: "2px 6px", borderRadius: "4px" }}>FLAGGED</span>
+                )}
+              </td>
+              <td style={{ padding: "12px 8px", textAlign: "right" }}>
+                {!blockedIPs.includes(item.ip) && (
+                  <button 
+                    onClick={() => onBlock(item.ip)}
+                    style={{ 
+                      background: "transparent", 
+                      border: `1px solid ${THEME.danger}`, 
+                      color: THEME.danger, 
+                      padding: "4px 8px", 
+                      borderRadius: "4px", 
+                      fontSize: "0.7rem", 
+                      cursor: "pointer" 
+                    }}>
+                    BLOCK
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr><td colSpan="4" style={{ padding: "40px", textAlign: "center" }}>Awaiting log analysis...</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+);
+
+const StatBox = ({ label, value, color }) => (
+  <div style={{ ...cardStyle, borderLeft: `2px solid ${color}`, background: THEME.surface }}>
+    <div style={{ fontSize: "0.7rem", color: THEME.text, marginBottom: "12px", letterSpacing: "1px" }}>{label}</div>
+    <div style={{ fontSize: "1.8rem", fontWeight: "800", color }}>{value}</div>
+  </div>
+);
+
+const handleUnblockIP = async (ip) => {
+  const res = await fetch("http://localhost:5000/api/unblock-ip", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ip })
+  });
+
+  if (res.ok) {
+    setBlockedIPs(prev => prev.filter(item => item !== ip));
+    toast.success(`🔓 IP ${ip} unblocked`);
+  }
+};
+```</IP_ADDRESS>
+
+// 3. MAIN DASHBOARD COMPONENT
+const Dashboard = ({ data, setData }) => {
+  const [activeTab, setActiveTab] = useState("Overview");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [blockedIPs, setBlockedIPs] = useState([]); 
+
+  // Listen for Live Threats (Automated blocking from server)
+  useEffect(() => {
+    socket.on("new-log", (newLog) => {
+      if (newLog.severity === "high") {
+// Replace the entire toast.error block with this plain-text version:
+toast.error("ALERT - ACTIVE DEFENSE: Blocked " + newLog.ip + " for " + newLog.type, {
+    theme: "dark"
+});
+        setBlockedIPs(prev => [...new Set([...prev, newLog.ip])]);
+      }
+    });
+
+    return () => socket.off("new-log");
+  }, []);
+
+  // Manual Block Handler
+  const handleManualBlock = async (ip) => {
+    try {
+      const res = await fetch("http://localhost:5000/api/block-ip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip })
+      });
+
+      if (res.ok) {
+toast.success("SUCCESS: IP " + ip + " blocked manually!");
+        setBlockedIPs(prev => [...new Set([...prev, ip])]);
+} else {
+        const errData = await res.json();
+        // Standard quotes and + to avoid backtick parsing errors
+        toast.error("Failed to block: " + (errData.error || "Unknown Error"));
+      }
+    } catch (err) {
+      toast.error("Engine connection lost.");
+    }
+  };
+
+  const handleUpload = async (e) => {
+    if (!e.target.files[0]) return;
+    setIsProcessing(true);
+    
+    const formData = new FormData();
+    formData.append("logfile", e.target.files[0]);
+    
+    try {
+      const res = await fetch("http://localhost:5000/upload", { 
+        method: "POST", 
+        body: formData 
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+// Replace line 187 with this:
+throw new Error("Server Error (" + res.status + "): " + errorText);
+      }
+
+      const result = await res.json();
+      setData(result);
+      toast.success("Log file processed successfully!");
+    } catch (err) {
+      console.error("Upload Error:", err);
+toast.error("Upload failed: " + err.message);
+    } finally {
+      setIsProcessing(false);
+      e.target.value = null; 
+    }
+  };
+
+  const handleDemo = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/demo");
+      if (!res.ok) throw new Error("Could not fetch demo data");
+      const demoJson = await res.json();
+      setData(demoJson);
+    } catch (err) {
+      console.error("Demo Error:", err);
+      toast.error("Failed to load demo data");
+    }
+  };
+
+  const exportToPDF = (currentData) => {
+    if (!currentData) {
+      alert("No data available to export!");
+      return;
+    }
+    const doc = new jsPDF();
+    doc.setFontSize(20);
+    doc.setTextColor(0, 242, 255);
+    doc.text("LogLens Security Report", 14, 20);
+    autoTable(doc, {
+      startY: 30,
+      head: [["IP Address", "Country", "Threat Type", "Severity"]],
+      body: currentData.ips.map(item => [item.ip, item.country || "Unknown", item.type || "Malicious", item.severity || "HIGH"]),
+      theme: 'grid',
+      headStyles: { fillColor: [22, 27, 34] },
+    });
+
+doc.save("LogLens_Report_" + Date.now() + ".pdf");  };
+
+  const OverviewContent = () => {
+    if (!data) {
+      return (
+border: "1px dashed " + THEME.border, borderRadius: "16px"
+          <h3 style={{ color: "white" }}>Awaiting Ingestion...</h3>
+          <p style={{ color: "#475569", fontSize: "0.8rem" }}>System status: STANDBY</p>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "24px" }}>
+          <StatBox label="INGESTED_EVENTS" value={data.total} color={THEME.accent} />
+          <StatBox label="ACTIVE_THREATS" value={data.threats} color={THEME.danger} />
+          <StatBox label="PRIMARY_VECTOR" value={data.top} color="#c084fc" />
+          <StatBox label="FIREWALL_BLOCKS" value={blockedIPs.length} color="#4ade80" />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px" }}>
+          <div style={cardStyle}>
+            <h4 style={titleStyle}>Ingestion Timeline</h4>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={data.timeline}>
+                <defs>
+                  <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={THEME.accent} stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor={THEME.accent} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="time" stroke={THEME.border} tick={{fill: THEME.text, fontSize: 10}} />
+                <Tooltip contentStyle={{background: THEME.surface, border: `1px solid ${THEME.border}`}} />
+                <Area type="monotone" dataKey="val" stroke={THEME.accent} fillOpacity={1} fill="url(#colorVal)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={cardStyle}>
+            <h4 style={titleStyle}>Severity Distribution</h4>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={Object.entries(data.sev_data).map(([n, v]) => ({ n, v }))}>
+                <XAxis dataKey="n" stroke="none" tick={{fill: THEME.text, fontSize: 11}} />
+                <Bar dataKey="v" radius={[4, 4, 0, 0]}>
+                  {Object.entries(data.sev_data).map((entry, index) => (
+                    <Cell key={index} fill={entry[0] === 'high' ? THEME.danger : THEME.accent} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1.6fr", gap: "24px" }}>
+          <div style={cardStyle}>
+            <h4 style={titleStyle}>Geospatial Attribution</h4>
+            <MapChart attackIps={data.ips} />
+          </div>
+          <div style={cardStyle}>
+            <h4 style={titleStyle}>Heuristic Live Stream</h4>
+            <LiveFeed live={true} />
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <h4 style={titleStyle}>Top Malicious Sources</h4>
+          {/* Passed handleManualBlock to the table component */}
+          <TopAttackersTable ips={data.ips} blockedIPs={blockedIPs} onBlock={handleManualBlock} />
+        </div>
+      </div>
+    );
+  };
+
+  const renderPage = () => {
+    switch (activeTab) {
+      case "Overview": return <OverviewContent />;
+      case "Reports": return (
+        <div style={cardStyle}>
+          <h4 style={titleStyle}>Security Reports Archive</h4>
+          {["Daily_Audit_Log.pdf", "Threat_Heuristics_April.csv"].map(file => (
+            <div key={file} style={{ padding: "15px", borderBottom: `1px solid ${THEME.border}`, display: "flex", justifyContent: "space-between" }}>
+              <span>{file}</span>
+              <span style={{ color: THEME.accent, cursor: "pointer" }}>DOWNLOAD</span>
+            </div>
+          ))}
+        </div>
+      );
+      default: return <div style={{ color: "white" }}>Module {activeTab} Initializing...</div>;
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", background: THEME.bg, minHeight: "100vh", color: "white", fontFamily: "monospace" }}>
+      {/* Sidebar */}
+      <div style={{ width: "280px", background: THEME.surface, borderRight: `1px solid ${THEME.border}`, padding: "40px 24px", height: "100vh", position: "sticky", top: 0, display: "flex", flexDirection: "column" }}>
+        <h2 style={{ color: THEME.accent, marginBottom: "50px" }}>LOGLENS</h2>
+        <nav style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1 }}>
+          {["Overview", "Incident Response", "Threat Intel", "Reports", "Settings"].map((item) => (
+            <div key={item} onClick={() => setActiveTab(item)} style={{ padding: "14px", color: activeTab === item ? THEME.accent : THEME.text, background: activeTab === item ? "#12232e" : "transparent", borderRadius: "8px", cursor: "pointer" }}>
+              {item}
+            </div>
+          ))}
+        </nav>
+        
+        {/* Firewall Status Sidebar Widget */}
+        <div style={{ marginTop: "20px", borderTop: `1px solid ${THEME.border}`, paddingTop: "20px" }}>
+            <div style={{ fontSize: "0.65rem", color: THEME.text, marginBottom: "10px" }}>FIREWALL_STATUS: ACTIVE</div>
+            <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                {blockedIPs.map(ip => (
+                    <div key={ip} style={{ fontSize: "0.75rem", color: THEME.danger, marginBottom: "4px" }}>
+                        ● {ip} (DROPPED)
+                    </div>
+                ))}
+            </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div style={{ flex: 1, padding: "40px" }}>
+        <ToastContainer />
+        <header style={{ display: "flex", justifyContent: "space-between", marginBottom: "40px" }}>
+          <div>
+            <h1>{activeTab}</h1>
+            {isProcessing && <p style={{ color: "#4ade80" }}>⚡ Processing Stream...</p>}
+          </div>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button onClick={handleDemo} style={{ ...btnStyle, background: "transparent", border: `1px solid ${THEME.accent}`, color: THEME.accent }}>DEMO</button>
+            <label style={btnStyle}>UPLOAD <input type="file" hidden onChange={handleUpload}/></label>
+            <button onClick={() => exportToPDF(data)} style={{ ...btnStyle, background: "transparent", border: `1px solid ${THEME.border}`, color: "white" }}>PDF</button>
+          </div>
+        </header>
+        {renderPage()}
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
