@@ -1,242 +1,194 @@
-import React, { useState, useEffect, useRef } from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import React, { useState } from "react";
 import { motion } from "framer-motion";
-import html2canvas from "html2canvas";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar
+} from "recharts";
+import { toast } from "react-toastify";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import io from "socket.io-client";
-import MapChart from "./MapChart";
-import LiveFeed from "./LiveFeed";
+import "./dashboard.css";
 
-const API_BASE_URL = "https://loglens-c3ws.onrender.com";
-const socket = io(API_BASE_URL, { transports: ["websocket"] });
+export default function Dashboard({ data, setData }) {
+  const [loading, setLoading] = useState(false);
 
-const THEME = {
-  bg: '#0a0b10',
-  card: '#161b22',
-  accent: '#00f2ff',
-  danger: '#ff4d4d',
-  warning: '#f39c12',
-  success: '#4ade80',
-  text: '#8b949e',
-  border: 'rgba(255,255,255,0.1)'
-};
+  // ---------------- DEMO ----------------
+  const loadDemo = () => {
+    const demo = {
+      total: 1420,
+      threats: 12,
+      blocked: 0,
+      risk: "HIGH",
+      ips: [
+        { ip: "192.168.1.105", abuseScore: 80, country: "US" },
+        { ip: "45.33.2.11", abuseScore: 92, country: "CN" },
+        { ip: "103.21.244.2", abuseScore: 60, country: "IN" },
+        { ip: "84.200.69.80", abuseScore: 70, country: "DE" }
+      ],
+      timeline: [
+        { time: "10:00", value: 200 },
+        { time: "10:30", value: 150 },
+        { time: "11:00", value: 180 },
+        { time: "11:30", value: 300 },
+        { time: "12:00", value: 500 }
+      ]
+    };
 
-const Dashboard = ({ data, setData }) => {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [blockedIPs, setBlockedIPs] = useState([]);
-  const fileInputRef = useRef(null);
+    setData(demo);
+    toast.success("Demo loaded 🚀");
+  };
 
-  // 🔴 Real-time alerts
-  useEffect(() => {
-    socket.on("new-log", (log) => {
-      if (log.abuseScore > 80) {
-        toast.error(`🚨 Blocked ${log.ip}`);
-        setBlockedIPs(prev => [...new Set([...prev, log.ip])]);
-      }
-    });
-    return () => socket.off("new-log");
-  }, []);
-
-  // 📤 Upload
-  const handleUpload = async (e) => {
+  // ---------------- UPLOAD ----------------
+  const uploadLog = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    setIsProcessing(true);
+    setLoading(true);
+
     const formData = new FormData();
     formData.append("logfile", file);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/upload`, {
+      const res = await fetch(process.env.REACT_APP_API + "/upload", {
         method: "POST",
         body: formData
       });
 
       const result = await res.json();
-
-      setData({
-        total: result.totalLogs,
-        threats: result.threats,
-        ips: result.ips,
-        sev_data: result.sev_data || { high: 0, medium: 0, low: 0 }
-      });
+      setData(result);
 
       toast.success("Analysis complete 🚀");
-
     } catch {
       toast.error("Upload failed");
-    } finally {
-      setIsProcessing(false);
     }
+
+    setLoading(false);
   };
 
-  // 🎯 Demo
-  const handleDemo = async () => {
-    const res = await fetch(`${API_BASE_URL}/demo`);
-    const data = await res.json();
-    setData(data);
-    toast.info("Demo loaded");
-  };
-
-  // 📄 PDF EXPORT (ELITE)
-  const exportToPDF = async () => {
-    if (!data?.ips?.length) return alert("No data");
+  // ---------------- PDF ----------------
+  const exportPDF = () => {
+    if (!data) return;
 
     const doc = new jsPDF();
 
-    // PAGE 1
-    doc.setFontSize(20);
-    doc.setTextColor(0,242,255);
-    doc.text("LogLens Security Intelligence Report", 14, 20);
+    doc.setFontSize(18);
+    doc.text("LogLens Security Report", 14, 15);
 
-    const avg = Math.round(
-      data.ips.reduce((a,b)=>a+(b.abuseScore||0),0)/(data.ips.length||1)
-    );
-
-    doc.setTextColor(255);
-    doc.text(`Risk Score: ${avg}%`, 14, 40);
-
-    doc.text(
-      `Detected ${data.threats} threats across ${data.total} logs.
-Environment risk is ${avg > 70 ? "HIGH" : avg > 40 ? "MEDIUM" : "LOW"}.
-Immediate monitoring recommended.`,
-      14, 60
-    );
-
-    // PAGE 2 (Charts)
-    doc.addPage();
-
-    const chart = document.querySelector(".recharts-wrapper");
-    if (chart) {
-      const canvas = await html2canvas(chart);
-      doc.addImage(canvas.toDataURL(), "PNG", 10, 20, 180, 80);
-    }
-
-    const map = document.querySelector("#map-container");
-    if (map) {
-      const canvas = await html2canvas(map);
-      doc.addImage(canvas.toDataURL(), "PNG", 10, 110, 180, 80);
-    }
-
-    // PAGE 3 (Table)
-    doc.addPage();
+    doc.setFontSize(10);
+    doc.text(`Risk Level: ${data.risk}`, 14, 22);
 
     autoTable(doc, {
-      startY: 20,
-      head: [["IP", "Score", "Country", "Severity"]],
-      body: data.ips.map(i => [
-        i.ip,
-        i.abuseScore,
-        i.country,
-        i.severity || "low"
-      ])
+      startY: 30,
+      head: [["IP", "Score", "Country"]],
+      body: data.ips.map(i => [i.ip, i.abuseScore, i.country])
     });
 
-    doc.save("loglens_report.pdf");
+    doc.save("report.pdf");
   };
 
-  return (
-    <div style={{ display:"flex", minHeight:"100vh", background:THEME.bg, color:"white" }}>
-      
-      <ToastContainer theme="dark"/>
+  // ---------------- SAFE DEFAULT ----------------
+  if (!data) {
+    return (
+      <div style={{ padding: 40, color: "#888" }}>
+        Upload a log file or click DEMO
+      </div>
+    );
+  }
 
-      {/* SIDEBAR */}
-      <div style={{ width:220, padding:20, background:"#111" }}>
-        <h2 style={{ color:THEME.accent }}>LOGLENS</h2>
-        <p style={{ color:THEME.text }}>Overview</p>
-        <p style={{ color:THEME.text }}>Intel</p>
-        <p style={{ color:THEME.text }}>Reports</p>
+  // ---------------- UI ----------------
+  return (
+    <div className="dashboard">
+
+      {/* HEADER */}
+      <div className="top-bar">
+        <button onClick={loadDemo}>DEMO</button>
+
+        <label className="upload-btn">
+          UPLOAD
+          <input type="file" onChange={uploadLog} hidden />
+        </label>
+
+        <button onClick={exportPDF}>PDF</button>
       </div>
 
-      {/* MAIN */}
-      <div style={{ flex:1, padding:30 }}>
+      {/* STATS */}
+      <div className="stats">
+        <Card title="EVENTS" value={data.total || 0} color="cyan" />
+        <Card title="THREATS" value={data.threats || 0} color="red" />
+        <Card title="BLOCKED" value={data.blocked || 0} color="green" />
+        <Card title="RISK" value={data.risk || "LOW"} color="purple" />
+      </div>
 
-        {/* TOP BAR */}
-        <div style={{ display:"flex", justifyContent:"space-between" }}>
-          <h1>Overview</h1>
-
-          <div style={{ display:"flex", gap:10 }}>
-            <button onClick={handleDemo}>DEMO</button>
-
-            <input type="file" hidden ref={fileInputRef} onChange={handleUpload}/>
-            <button onClick={()=>fileInputRef.current.click()}>
-              {isProcessing ? "ANALYZING..." : "UPLOAD"}
-            </button>
-
-            <button onClick={exportToPDF}>PDF</button>
-          </div>
+      {/* CHARTS */}
+      <div className="charts">
+        <div className="chart-box">
+          <h4>INGESTION TIMELINE</h4>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data.timeline || []}>
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="value" stroke="#00f5ff" />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
 
-        {!data ? (
-          <div style={{ textAlign:"center", marginTop:100 }}>
-            <h2 style={{ color:THEME.accent }}>ENGINE OFFLINE</h2>
-          </div>
-        ) : (
-
-          <div>
-
-            {/* CARDS */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:20 }}>
-              {[
-                { label:"EVENTS", value:data.total, color:THEME.accent },
-                { label:"THREATS", value:data.threats, color:THEME.danger },
-                { label:"BLOCKED", value:blockedIPs.length, color:THEME.success },
-                { label:"RISK", value:"HIGH", color:"purple" }
-              ].map((c,i)=>(
-                <motion.div key={i}
-                  whileHover={{ scale:1.05 }}
-                  style={{
-                    background:THEME.card,
-                    padding:20,
-                    borderLeft:`4px solid ${c.color}`
-                  }}>
-                  <p>{c.label}</p>
-                  <h2>{c.value}</h2>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* CHART */}
-            <div style={{ marginTop:30 }}>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={data.ips}>
-                  <Area dataKey="abuseScore" stroke={THEME.accent} fill={THEME.accent}/>
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* MAP + LIVE */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginTop:30 }}>
-              <div id="map-container"><MapChart data={data.ips}/></div>
-              <LiveFeed/>
-            </div>
-
-            {/* TABLE */}
-            <table style={{ width:"100%", marginTop:30 }}>
-              <thead>
-                <tr>
-                  <th>IP</th><th>Score</th><th>Country</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.ips.map((ip,i)=>(
-                  <tr key={i}>
-                    <td>{ip.ip}</td>
-                    <td>{ip.abuseScore}</td>
-                    <td>{ip.country}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-          </div>
-        )}
+        <div className="chart-box">
+          <h4>SEVERITY</h4>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={[
+              { name: "High", value: data.threats },
+              { name: "Low", value: data.total - data.threats }
+            ]}>
+              <Bar dataKey="value" fill="#00f5ff" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
+
+      {/* MAP + TERMINAL */}
+      <div className="grid">
+        <div className="map-box">🌍 Map (placeholder)</div>
+
+        <div className="terminal">
+          root@loglens:~# tail -f /var/log/attacks
+          <br />
+          {loading ? "Analyzing..." : "Live stream ready"}
+        </div>
+      </div>
+
+      {/* TABLE */}
+      <div className="table">
+        <h4>TOP MALICIOUS SOURCES</h4>
+
+        <table>
+          <thead>
+            <tr>
+              <th>IP</th>
+              <th>Score</th>
+              <th>Country</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {data.ips.map((i, idx) => (
+              <tr key={idx}>
+                <td>{i.ip}</td>
+                <td>{i.abuseScore}</td>
+                <td>{i.country}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
     </div>
   );
-};
+}
 
-export default Dashboard;
+// ---------------- CARD ----------------
+const Card = ({ title, value, color }) => (
+  <motion.div className={`card ${color}`} whileHover={{ scale: 1.05 }}>
+    <p>{title}</p>
+    <h2>{value}</h2>
+  </motion.div>
+);
