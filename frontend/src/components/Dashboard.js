@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, LineChart, Line } from "recharts";
 import { toast, ToastContainer } from 'react-toastify'; 
 import 'react-toastify/dist/ReactToastify.css';
@@ -8,7 +8,10 @@ import io from "socket.io-client";
 import MapChart from "./MapChart";
 import LiveFeed from "./LiveFeed";
 
-const socket = io("https://loglens-c3ws.onrender.com");
+// --- DYNAMIC API URL ---
+// Change this to your actual Render URL (e.g., https://loglens-api.onrender.com)
+const API_BASE_URL = "https://loglens-c3ws.onrender.com"; 
+const socket = io(API_BASE_URL);
 
 const THEME = {
   bg: '#0a0b10',
@@ -39,7 +42,10 @@ const btnStyle = {
   fontSize: "0.8rem",
   fontWeight: "bold",
   cursor: "pointer",
-  border: "none"
+  border: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
 };
 
 const titleStyle = {
@@ -51,7 +57,6 @@ const titleStyle = {
   fontWeight: "bold"
 };
 
-// --- NEW COMPONENT: REPUTATION BADGE ---
 const AbuseBadge = ({ score }) => {
     const color = score > 80 ? THEME.danger : score > 40 ? THEME.warning : THEME.success;
     return (
@@ -69,7 +74,6 @@ const AbuseBadge = ({ score }) => {
     );
 };
 
-// --- UPDATED TABLE: WITH ABUSE SCORES ---
 const TopAttackersTable = ({ ips, blockedIPs, onBlock }) => (
   <div style={{ width: "100%", marginTop: "10px" }}>
     <table style={{ width: "100%", borderCollapse: "collapse", color: "#94a3b8", fontSize: "0.85rem" }}>
@@ -129,7 +133,7 @@ const OverviewContent = ({ data, blockedIPs, handleManualBlock, velocityData }) 
         <StatBox label="AVG_ABUSE_CONFIDENCE" value={`${Math.round(data.ips?.reduce((a, b) => a + (b.abuseScore || 0), 0) / (data.ips?.length || 1))}%`} color={THEME.warning} />
         <StatBox label="FIREWALL_BLOCKS" value={blockedIPs.length} color={THEME.success} subtitle="REAL-TIME DROPS" />
       </div>
-
+      {/* Rest of the UI remains same... */}
       <div style={{ display: "grid", gridTemplateColumns: "2.1fr 0.9fr", gap: "24px" }}>
         <div style={cardStyle}>
           <h4 style={titleStyle}>Attack Velocity (Last 30 Min)</h4>
@@ -156,7 +160,6 @@ const OverviewContent = ({ data, blockedIPs, handleManualBlock, velocityData }) 
           </ResponsiveContainer>
         </div>
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
         <div style={cardStyle}>
           <h4 style={titleStyle}>Global Threat Map</h4>
@@ -167,7 +170,6 @@ const OverviewContent = ({ data, blockedIPs, handleManualBlock, velocityData }) 
           <LiveFeed live={true} />
         </div>
       </div>
-
       <div style={cardStyle}>
         <h4 style={titleStyle}>Threat Intelligence Database</h4>
         <TopAttackersTable ips={data.ips || []} blockedIPs={blockedIPs} onBlock={handleManualBlock} />
@@ -181,59 +183,60 @@ const Dashboard = ({ data, setData }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [blockedIPs, setBlockedIPs] = useState([]); 
   const [velocityData, setVelocityData] = useState([]);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     socket.on("new-log", (newLog) => {
-      // 1. Auto-Alert & Block
       if (newLog.severity === "high" || newLog.abuseScore > 80) {
-        toast.error(`SHIELD ACTIVE: Blocked ${newLog.ip} (${newLog.abuseScore}% Abuse Score)`, { theme: "dark" });
+        toast.error(`SHIELD ACTIVE: Blocked ${newLog.ip}`, { theme: "dark" });
         setBlockedIPs(prev => [...new Set([...prev, newLog.ip])]);
       }
-
-      // 2. Update Charts
-      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setVelocityData(prev => {
-          const last = prev[prev.length - 1];
-          if (last && last.time === now) {
-              return [...prev.slice(0, -1), { ...last, threats: last.threats + 1 }];
-          }
-          return [...prev.slice(-10), { time: now, threats: 1 }];
-      });
     });
-
     return () => socket.off("new-log");
   }, []);
 
   const handleManualBlock = async (ip) => {
     try {
-      const res = await fetch("http://localhost:5000/api/block-ip", {
+      const res = await fetch(`${API_BASE_URL}/api/block-ip`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ip })
       });
-      if (res.ok) {
-        toast.success(`FIREWALL UPDATED: ${ip} Dropped`);
-        setBlockedIPs(prev => [...new Set([...prev, ip])]);
-      }
+      if (res.ok) setBlockedIPs(prev => [...new Set([...prev, ip])]);
     } catch (err) { toast.error("Engine connection lost."); }
   };
 
   const handleUpload = async (e) => {
-    if (!e.target.files[0]) return;
+    const file = e.target.files[0];
+    if (!file) return;
+    
     setIsProcessing(true);
     const formData = new FormData();
-    formData.append("logfile", e.target.files[0]);
+    formData.append("logfile", file);
+
     try {
-      const res = await fetch("http://localhost:5000/upload", { method: "POST", body: formData });
+      const res = await fetch(`${API_BASE_URL}/upload`, { 
+        method: "POST", 
+        body: formData 
+      });
+      
+      if (!res.ok) throw new Error("Server error");
+      
       const result = await res.json();
       setData(result);
-      toast.success("Log file processed successfully!");
-    } catch (err) { toast.error("Upload failed."); } finally { setIsProcessing(false); e.target.value = null; }
+      toast.success("Intelligence Engine Updated!");
+    } catch (err) { 
+      console.error(err);
+      toast.error("Upload failed. Check if Backend is live."); 
+    } finally { 
+      setIsProcessing(false); 
+      e.target.value = null; 
+    }
   };
 
   const handleDemo = async () => {
     try {
-      const res = await fetch("http://localhost:5000/demo");
+      const res = await fetch(`${API_BASE_URL}/demo`);
       const demoJson = await res.json();
       setData(demoJson);
       toast.info("Demo intelligence loaded.");
@@ -243,162 +246,66 @@ const Dashboard = ({ data, setData }) => {
   const exportToPDF = (currentData) => {
     if (!currentData || !currentData.ips) return alert("No data to export!");
     const doc = new jsPDF();
-    doc.setFontSize(22);
-    doc.setTextColor(0, 242, 255);
-    doc.text("LOGLENS THREAT INTELLIGENCE REPORT", 14, 20);
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
-    
     autoTable(doc, {
-      startY: 35,
-      head: [["IP Address", "Abuse Score", "Country", "Threat Type", "Status"]],
-      body: currentData.ips.map(item => [
-          item.ip, 
-          `${item.abuseScore || 0}%`, 
-          item.country || "Unknown", 
-          item.type || "Malicious",
-          blockedIPs.includes(item.ip) ? "DROPPED" : "FLAGGED"
-      ]),
-      theme: 'striped',
-      headStyles: { fillColor: [22, 27, 34], textColor: [0, 242, 255] },
+      head: [["IP Address", "Abuse Score", "Country", "Status"]],
+      body: currentData.ips.map(item => [item.ip, `${item.abuseScore}%`, item.country || "Global", blockedIPs.includes(item.ip) ? "DROPPED" : "FLAGGED"]),
     });
-    doc.save("LogLens_Security_Audit.pdf");
+    doc.save("Security_Audit.pdf");
   };
 
-// --- HELPER: INCIDENT LOG TABLE ---
-const IncidentTable = ({ blockedIPs }) => (
-    <div style={cardStyle}>
-        <h4 style={titleStyle}>Active Mitigation Logs</h4>
-        <table style={{ width: "100%", color: THEME.text, fontSize: "0.85rem", textAlign: "left" }}>
-            <thead>
-                <tr style={{ borderBottom: "1px solid " + THEME.border }}>
-                    <th style={{ padding: "12px" }}>Target IP</th>
-                    <th style={{ padding: "12px" }}>Action Taken</th>
-                    <th style={{ padding: "12px" }}>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {blockedIPs.map((ip, i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid " + THEME.border }}>
-                        <td style={{ padding: "12px", color: "white", fontFamily: "monospace" }}>{ip}</td>
-                        <td style={{ padding: "12px" }}>IPTABLES_DROP</td>
-                        <td style={{ padding: "12px", color: THEME.danger }}>ACTIVE_BAN</td>
-                    </tr>
-                ))}
-                {blockedIPs.length === 0 && <tr><td colSpan="3" style={{ padding: "20px", textAlign: "center" }}>No active firewall blocks.</td></tr>}
-            </tbody>
-        </table>
-    </div>
-);
-
-// --- UPDATED RENDER PAGE ---
-const renderPage = () => {
+  const renderPage = () => {
     if (activeTab === "Overview" && !data) {
         return (
             <div style={{ color: "white", padding: "100px", textAlign: "center" }}>
                 <h2 style={{ color: THEME.accent, letterSpacing: '4px' }}>LOGLENS ENGINE OFFLINE</h2>
-                <p style={{ color: THEME.text }}>Start the backend or upload a log file to begin monitoring.</p>
+                <p style={{ color: THEME.text }}>Upload a log file to begin monitoring.</p>
             </div>
         );
     }
-
     switch (activeTab) {
-        case "Overview":
-            return <OverviewContent data={data} blockedIPs={blockedIPs} handleManualBlock={handleManualBlock} velocityData={velocityData} />;
-        
-        case "Incident Response":
-            return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                        <StatBox label="TOTAL_BLOCKS" value={blockedIPs.length} color={THEME.danger} />
-                        <StatBox label="SYSTEM_HEALTH" value="SECURE" color={THEME.success} />
-                    </div>
-                    <IncidentTable blockedIPs={blockedIPs} />
-                </div>
-            );
-
-        case "Threat Intel":
-            return (
-                <div style={cardStyle}>
-                    <h4 style={titleStyle}>Reputation Intelligence</h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                        {data?.ips?.map((ip, i) => (
-                            <div key={i} style={{ padding: '15px', background: '#ffffff05', borderRadius: '8px', border: '1px solid ' + THEME.border }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: THEME.accent, fontFamily: 'monospace' }}>{ip.ip}</span>
-                                    <AbuseBadge score={ip.abuseScore} />
-                                </div>
-                                <p style={{ fontSize: '0.7rem', color: THEME.text, marginTop: '10px' }}>
-                                    Detected via: <span style={{ color: 'white' }}>{ip.type}</span> | 
-                                    Country: <span style={{ color: 'white' }}>{ip.country}</span>
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
-
-        case "Reports":
-            return (
-                <div style={cardStyle}>
-                    <h4 style={titleStyle}>Export Center</h4>
-                    <div style={{ padding: '20px', background: '#ffffff05', border: '1px dashed ' + THEME.border, borderRadius: '8px', textAlign: 'center' }}>
-                        <p style={{ color: THEME.text, marginBottom: '15px' }}>Current session contains {data?.ips?.length || 0} security events.</p>
-                        <button onClick={() => exportToPDF(data)} style={btnStyle}>DOWNLOAD FULL PDF REPORT</button>
-                    </div>
-                </div>
-            );
-
-        default:
-            return <OverviewContent data={data} blockedIPs={blockedIPs} handleManualBlock={handleManualBlock} velocityData={velocityData} />;
+        case "Overview": return <OverviewContent data={data} blockedIPs={blockedIPs} handleManualBlock={handleManualBlock} velocityData={velocityData} />;
+        case "Incident Response": return <div style={cardStyle}><h4 style={titleStyle}>Active Mitigation Logs</h4>{blockedIPs.map(ip => <div key={ip}>{ip} - BANNED</div>)}</div>;
+        case "Threat Intel": return <div style={cardStyle}><h4 style={titleStyle}>Global Intelligence</h4>{data?.ips?.map(ip => <div key={ip.ip}>{ip.ip} - {ip.abuseScore}%</div>)}</div>;
+        case "Reports": return <div style={cardStyle}><button onClick={() => exportToPDF(data)} style={btnStyle}>GENERATE PDF</button></div>;
+        default: return null;
     }
-};
+  };
 
   const topThreat = data?.ips?.reduce((prev, current) => (prev.abuseScore > current.abuseScore) ? prev : current, { abuseScore: 0 });
 
   return (
-    <div style={{ display: "flex", background: THEME.bg, minHeight: "100vh", color: "white", fontFamily: "'JetBrains Mono', monospace" }}>
+    <div style={{ display: "flex", background: THEME.bg, minHeight: "100vh", color: "white", fontFamily: "monospace" }}>
       {/* SIDEBAR */}
-      <div style={{ width: "280px", background: THEME.surface, borderRight: "1px solid " + THEME.border, padding: "40px 24px", height: "100vh", position: "sticky", top: 0, display: "flex", flexDirection: "column" }}>
-        <h2 style={{ color: THEME.accent, marginBottom: "50px", letterSpacing: '2px' }}>LOGLENS SIEM TOOL</h2>
-        <nav style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1 }}>
+      <div style={{ width: "280px", background: THEME.surface, borderRight: "1px solid " + THEME.border, padding: "40px 24px", height: "100vh", position: "sticky", top: 0 }}>
+        <h2 style={{ color: THEME.accent, marginBottom: "50px" }}>LOGLENS SIEM</h2>
+        <nav style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {["Overview", "Incident Response", "Threat Intel", "Reports"].map((item) => (
-            <div key={item} onClick={() => setActiveTab(item)} style={{ padding: "14px", color: activeTab === item ? THEME.accent : THEME.text, background: activeTab === item ? "#ffffff05" : "transparent", borderRadius: "8px", cursor: "pointer", borderLeft: activeTab === item ? `3px solid ${THEME.accent}` : '3px solid transparent' }}>
+            <div key={item} onClick={() => setActiveTab(item)} style={{ padding: "12px", color: activeTab === item ? THEME.accent : THEME.text, cursor: "pointer", background: activeTab === item ? "#ffffff05" : "transparent" }}>
               {item}
             </div>
           ))}
         </nav>
-
-        {/* THREAT INTEL CARD */}
-        {topThreat && topThreat.abuseScore > 0 && (
-            <div style={{ background: '#ff4d4d10', border: '1px solid #ff4d4d40', padding: '15px', borderRadius: '10px', marginBottom: '20px' }}>
-                <div style={{ fontSize: '0.6rem', color: THEME.danger, fontWeight: 'bold' }}>CRITICAL_IP_DETECTED</div>
-                <div style={{ fontSize: '1rem', marginTop: '5px' }}>{topThreat.ip}</div>
-                <div style={{ fontSize: '0.7rem', color: THEME.text }}>{topThreat.abuseScore}% Global Confidence</div>
-            </div>
-        )}
-
-        <div style={{ borderTop: "1px solid " + THEME.border, paddingTop: "20px" }}>
-            <div style={{ fontSize: "0.65rem", color: THEME.text, marginBottom: "10px" }}>FIREWALL_HISTORY ({blockedIPs.length})</div>
-            <div style={{ maxHeight: "150px", overflowY: "auto", fontSize: '0.7rem' }}>
-                {blockedIPs.map(ip => <div key={ip} style={{ color: THEME.danger, marginBottom: "4px" }}>✂ {ip}</div>)}
-            </div>
-        </div>
       </div>
 
       {/* MAIN CONTENT */}
       <div style={{ flex: 1, padding: "40px" }}>
-        <ToastContainer position="bottom-right" />
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', marginBottom: "40px" }}>
-          <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{activeTab}</h1>
-            {isProcessing && <p style={{ color: THEME.success, fontSize: '0.8rem' }}>● ANALYZING STREAM...</p>}
-          </div>
+        <ToastContainer theme="dark" />
+        <header style={{ display: "flex", justifyContent: "space-between", marginBottom: "40px" }}>
+          <h1>{activeTab}</h1>
           <div style={{ display: "flex", gap: "12px" }}>
             <button onClick={handleDemo} style={{ ...btnStyle, background: "transparent", border: "1px solid " + THEME.accent, color: THEME.accent }}>LOAD_INTEL</button>
-            <label style={btnStyle}>UPLOAD_LOG <input type="file" hidden onChange={handleUpload}/></label>
-            <button onClick={() => exportToPDF(data)} style={{ ...btnStyle, background: THEME.accent, color: 'black' }}>GENERATE_PDF</button>
+            
+            {/* HIDDEN INPUT FOR UPLOAD */}
+            <input type="file" ref={fileInputRef} hidden onChange={handleUpload} />
+            <button 
+                onClick={() => fileInputRef.current.click()} 
+                style={btnStyle}
+                disabled={isProcessing}
+            >
+              {isProcessing ? "ANALYZING..." : "UPLOAD_LOG"}
+            </button>
+            
+            <button onClick={() => exportToPDF(data)} style={btnStyle}>GENERATE_PDF</button>
           </div>
         </header>
         {renderPage()}
