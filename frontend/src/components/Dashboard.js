@@ -1,3 +1,4 @@
+import html2canvas from "html2canvas";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import React, { useState, useEffect, useRef } from "react";
@@ -81,8 +82,14 @@ const Dashboard = ({ data, setData }) => {
 
       console.log("Result:", result);
 
-      setData(result);
-      toast.success("Analysis complete 🚀");
+setData({
+  total: result?.total || 0,
+  threats: result?.threats || 0,
+  ips: result?.ips || [],
+  sev_data: result?.sev_data || { high: 0, medium: 0, low: 0 }
+});
+
+toast.success("Analysis complete 🚀");
 
     } catch (err) {
       console.error("UPLOAD ERROR:", err);
@@ -104,18 +111,135 @@ const Dashboard = ({ data, setData }) => {
     }
   };
 
-  const exportToPDF = () => {
-    if (!data?.ips) return alert("No data");
+const exportToPDF = async () => {
+  if (!data?.ips || data.ips.length === 0) {
+    alert("No data");
+    return;
+  }
 
-    const doc = new jsPDF();
+  const doc = new jsPDF();
 
-    autoTable(doc, {
-      head: [["IP", "Score", "Country"]],
-      body: data.ips.map(i => [i.ip, i.abuseScore, i.country])
-    });
+  // ================= PAGE 1: EXECUTIVE SUMMARY =================
+  doc.setFontSize(20);
+  doc.setTextColor(0, 242, 255);
+  doc.text("LogLens Executive Report", 14, 20);
 
-    doc.save("report.pdf");
-  };
+  doc.setFontSize(11);
+  doc.setTextColor(150);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+
+  const avgScore = Math.round(
+    data.ips.reduce((a, b) => a + (b.abuseScore || 0), 0) /
+    (data.ips.length || 1)
+  );
+
+  const riskLevel =
+    avgScore > 70 ? "HIGH" : avgScore > 40 ? "MEDIUM" : "LOW";
+
+  // 🧠 AI-style summary (auto generated)
+  const summaryText = `
+This report analyzes ${data.total} log events and detected ${data.threats} potential threats.
+The overall risk score is ${avgScore}% indicating a ${riskLevel} risk environment.
+Most activity originates from ${data.ips[0]?.country || "unknown regions"} 
+with patterns suggesting automated probing or brute-force attempts.
+Immediate monitoring and mitigation is recommended.
+`;
+
+  doc.setTextColor(255);
+  doc.setFontSize(11);
+  doc.text(summaryText, 14, 45, { maxWidth: 180 });
+
+  // ================= PAGE 2 =================
+  doc.addPage();
+
+  doc.setFontSize(16);
+  doc.setTextColor(0, 242, 255);
+  doc.text("Threat Analytics", 14, 15);
+
+  // ================= 📊 CAPTURE CHART =================
+  try {
+    const chartElement = document.querySelector(".recharts-wrapper");
+
+    if (chartElement) {
+      const canvas = await html2canvas(chartElement);
+      const img = canvas.toDataURL("image/png");
+
+      doc.addImage(img, "PNG", 14, 25, 180, 80);
+    }
+  } catch (err) {
+    console.log("Chart capture failed");
+  }
+
+  // ================= 📍 CAPTURE MAP =================
+  try {
+    const mapElement = document.querySelector("#map-container");
+
+    if (mapElement) {
+      const canvas = await html2canvas(mapElement);
+      const img = canvas.toDataURL("image/png");
+
+      doc.addImage(img, "PNG", 14, 110, 180, 80);
+    }
+  } catch (err) {
+    console.log("Map capture failed");
+  }
+
+  // ================= PAGE 3 =================
+  doc.addPage();
+
+  doc.setFontSize(16);
+  doc.setTextColor(0, 242, 255);
+  doc.text("Detailed Threat Table", 14, 15);
+
+  autoTable(doc, {
+    startY: 25,
+
+    head: [["IP Address", "Score", "Country", "Severity"]],
+
+    body: data.ips.map(i => [
+      i.ip || "-",
+      i.abuseScore ?? 0,
+      i.country || "Unknown",
+      i.severity || "low"
+    ]),
+
+    headStyles: {
+      fillColor: [0, 242, 255],
+      textColor: 0
+    },
+
+    didParseCell: (cell) => {
+      if (cell.section === "body") {
+        const severity = cell.row.raw[3];
+
+        if (severity === "high") {
+          cell.cell.styles.fillColor = [255, 77, 77];
+          cell.cell.styles.textColor = 255;
+        } else if (severity === "medium") {
+          cell.cell.styles.fillColor = [243, 156, 18];
+        } else {
+          cell.cell.styles.fillColor = [74, 222, 128];
+        }
+      }
+    }
+  });
+
+  // ================= FOOTER =================
+  const pageCount = doc.getNumberOfPages();
+
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(9);
+    doc.setTextColor(150);
+    doc.text(
+      `LogLens SIEM Report • Page ${i}/${pageCount}`,
+      14,
+      doc.internal.pageSize.height - 10
+    );
+  }
+
+  doc.save("loglens_enterprise_report.pdf");
+};
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: THEME.bg, color: "white" }}>
