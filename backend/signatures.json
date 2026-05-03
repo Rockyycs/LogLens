@@ -1,0 +1,5 @@
+{
+  "sql_injection": ["select", "union", "1=1", "--"],
+  "path_traversal": ["../", "/etc/passwd", "boot.ini"]
+}
+

@@ -1,0 +1,10 @@
+const fs = require('fs');
+
+function startWatching(filename) {
+    console.log("Monitoring file: " + filename);
+    fs.watchFile(filename, (curr, prev) => {
+        console.log(filename + " was updated at: " + curr.mtime);
+    });
+}
+
+module.exports = startWatching;
