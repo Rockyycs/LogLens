@@ -24,11 +24,11 @@ const JWT_SECRET = "your_super_secret_loglens_key";
 
 const CLF_REGEX = /^(\S+) \S+ \S+ \[([\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\S+)?" (\d{3}) (\d+|-)/;
 
-const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: ["https://log-lens-p4a434btw-rockyycs-projects-3b259ed7.vercel.app", "http://localhost:3000"],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
