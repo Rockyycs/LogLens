@@ -18,12 +18,16 @@ const ABUSE_IPDB_KEY = "4241a4c973943dc551bd9e1578248be113ef61e4952bb53d849bd1d6
 const BANNED_COUNTRIES = ['CN', 'RU', 'KP']; 
 const app = express();
 
+// MOVE THIS LINE UP (This creates the 'server' variable)
+const server = http.createServer(app);
+
 const LOG_FILE = fs.existsSync("/var/log/auth.log") ? "/var/log/auth.log" : null; 
 const BLOCKED_IPS_FILE = "./blocked_ips.json";
 const JWT_SECRET = "your_super_secret_loglens_key"; 
 
 const CLF_REGEX = /^(\S+) \S+ \S+ \[([\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\S+)?" (\d{3}) (\d+|-)/;
 
+// NOW YOU CAN USE 'server' HERE
 const io = new Server(server, {
   cors: {
     origin: ["https://log-lens-p4a434btw-rockyycs-projects-3b259ed7.vercel.app", "http://localhost:3000"],
