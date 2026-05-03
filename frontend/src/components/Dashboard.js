@@ -1,246 +1,239 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from "recharts";
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { motion } from "framer-motion";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import io from "socket.io-client";
 import MapChart from "./MapChart";
 import LiveFeed from "./LiveFeed";
 
-// 1. GLOBAL THEME & STYLES
+const API_BASE_URL = "https://loglens-c3ws.onrender.com";
+const socket = io(API_BASE_URL, { transports: ["websocket"] });
+
 const THEME = {
   bg: '#0a0b10',
-  surface: '#161b22', // Standardized name
   card: '#161b22',
   accent: '#00f2ff',
   danger: '#ff4d4d',
+  warning: '#f39c12',
+  success: '#4ade80',
   text: '#8b949e',
-  border: 'rgba(255, 255, 255, 0.1)'
+  border: 'rgba(255,255,255,0.1)'
 };
 
-const cardStyle = {
-  backgroundColor: THEME.card,
-  borderRadius: '12px',
-  padding: '20px',
-  border: `1px solid ${THEME.border}`,
-  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)',
-  color: 'white'
-};
-
-const btnStyle = {
-  background: THEME.accent,
-  color: "black",
-  padding: "12px 24px",
-  borderRadius: "6px",
-  fontSize: "0.8rem",
-  fontWeight: "bold",
-  cursor: "pointer",
-  border: "none"
-};
-
-const titleStyle = {
-  fontSize: "0.85rem",
-  color: THEME.text,
-  marginBottom: "24px",
-  textTransform: "uppercase",
-  letterSpacing: "1.5px",
-  fontWeight: "bold"
-};
-
-// 2. HELPER COMPONENTS
-const StatBox = ({ label, value, color }) => (
-  <div style={{ ...cardStyle, borderLeft: `2px solid ${color}`, background: THEME.surface }}>
-    <div style={{ fontSize: "0.7rem", color: THEME.text, marginBottom: "12px", letterSpacing: "1px" }}>{label}</div>
-    <div style={{ fontSize: "1.8rem", fontWeight: "800", color }}>{value}</div>
-  </div>
-);
-
-const TopAttackersTable = ({ ips }) => (
-  <div style={{ width: "100%", marginTop: "10px" }}>
-    <table style={{ width: "100%", borderCollapse: "collapse", color: "#94a3b8", fontSize: "0.85rem" }}>
-      <thead>
-        <tr style={{ borderBottom: `1px solid ${THEME.border}`, textAlign: "left" }}>
-          <th style={{ padding: "12px 8px" }}>IP Address</th>
-          <th style={{ padding: "12px 8px" }}>Origin</th>
-          <th style={{ padding: "12px 8px" }}>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {ips && ips.length > 0 ? (
-          ips.slice(0, 5).map((item, idx) => (
-            <tr key={idx} style={{ borderBottom: `1px solid ${THEME.border}`, background: idx % 2 === 0 ? 'transparent' : '#ffffff05' }}>
-              <td style={{ padding: "12px 8px", color: "white", fontFamily: "monospace" }}>{item.ip}</td>
-              <td style={{ padding: "12px 8px" }}>{item.country || "Global"}</td>
-              <td style={{ padding: "12px 8px" }}>
-                <span style={{ color: "#ff4d4d", fontSize: "0.7rem", border: "1px solid #ff4d4d", padding: "2px 6px", borderRadius: "4px" }}>MALICIOUS</span>
-              </td>
-            </tr>
-          ))
-        ) : (
-          <tr><td colSpan="3" style={{ padding: "40px", textAlign: "center" }}>Awaiting log analysis...</td></tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-);
-
-// 3. MAIN DASHBOARD COMPONENT
 const Dashboard = ({ data, setData }) => {
-  const [activeTab, setActiveTab] = useState("Overview");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [blockedIPs, setBlockedIPs] = useState([]);
+  const fileInputRef = useRef(null);
 
+  // 🔴 Real-time alerts
+  useEffect(() => {
+    socket.on("new-log", (log) => {
+      if (log.abuseScore > 80) {
+        toast.error(`🚨 Blocked ${log.ip}`);
+        setBlockedIPs(prev => [...new Set([...prev, log.ip])]);
+      }
+    });
+    return () => socket.off("new-log");
+  }, []);
+
+  // 📤 Upload
   const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
     setIsProcessing(true);
     const formData = new FormData();
-    formData.append("logfile", e.target.files[0]);
+    formData.append("logfile", file);
+
     try {
-      const res = await fetch("http://localhost:5000/upload", { method: "POST", body: formData });
+      const res = await fetch(`${API_BASE_URL}/upload`, {
+        method: "POST",
+        body: formData
+      });
+
       const result = await res.json();
-      setData(result);
-    } catch (err) {
-      console.error(err);
+
+      setData({
+        total: result.totalLogs,
+        threats: result.threats,
+        ips: result.ips,
+        sev_data: result.sev_data || { high: 0, medium: 0, low: 0 }
+      });
+
+      toast.success("Analysis complete 🚀");
+
+    } catch {
+      toast.error("Upload failed");
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // 🎯 Demo
   const handleDemo = async () => {
-    const res = await fetch("http://localhost:5000/demo");
-    const demoJson = await res.json();
-    setData(demoJson);
+    const res = await fetch(`${API_BASE_URL}/demo`);
+    const data = await res.json();
+    setData(data);
+    toast.info("Demo loaded");
   };
 
-  const exportToPDF = (currentData) => {
-    if (!currentData) {
-      alert("No data available to export!");
-      return;
-    }
+  // 📄 PDF EXPORT (ELITE)
+  const exportToPDF = async () => {
+    if (!data?.ips?.length) return alert("No data");
+
     const doc = new jsPDF();
+
+    // PAGE 1
     doc.setFontSize(20);
-    doc.setTextColor(0, 242, 255);
-    doc.text("LogLens Security Report", 14, 20);
-    autoTable(doc, {
-      startY: 30,
-      head: [["IP Address", "Country", "Threat Type", "Severity"]],
-      body: currentData.ips.map(item => [item.ip, item.country || "Unknown", "Malicious Activity", "HIGH"]),
-      theme: 'grid',
-      headStyles: { fillColor: [22, 27, 34] },
-    });
-    doc.save(`LogLens_Report_${Date.now()}.pdf`);
-  };
+    doc.setTextColor(0,242,255);
+    doc.text("LogLens Security Intelligence Report", 14, 20);
 
-  const OverviewContent = () => {
-    if (!data) {
-      return (
-        <div style={{ height: "60vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", border: `1px dashed ${THEME.border}`, borderRadius: "16px" }}>
-          <h3 style={{ color: "white" }}>Awaiting Ingestion...</h3>
-          <p style={{ color: "#475569", fontSize: "0.8rem" }}>System status: STANDBY</p>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "24px" }}>
-          <StatBox label="INGESTED_EVENTS" value={data.total} color={THEME.accent} />
-          <StatBox label="ACTIVE_THREATS" value={data.threats} color={THEME.danger} />
-          <StatBox label="PRIMARY_VECTOR" value={data.top} color="#c084fc" />
-          <StatBox label="SECURITY_SCORE" value={data.score} color="#4ade80" />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "24px" }}>
-          <div style={cardStyle}>
-            <h4 style={titleStyle}>Ingestion Timeline</h4>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={data.timeline}>
-                <defs>
-                  <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={THEME.accent} stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor={THEME.accent} stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="time" stroke={THEME.border} tick={{fill: THEME.text, fontSize: 10}} />
-                <Tooltip contentStyle={{background: THEME.surface, border: `1px solid ${THEME.border}`}} />
-                <Area type="monotone" dataKey="val" stroke={THEME.accent} fillOpacity={1} fill="url(#colorVal)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-          <div style={cardStyle}>
-            <h4 style={titleStyle}>Severity Distribution</h4>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={Object.entries(data.sev_data).map(([n, v]) => ({ n, v }))}>
-                <XAxis dataKey="n" stroke="none" tick={{fill: THEME.text, fontSize: 11}} />
-                <Bar dataKey="v" radius={[4, 4, 0, 0]}>
-                  {Object.entries(data.sev_data).map((entry, index) => (
-                    <Cell key={index} fill={entry[0] === 'high' ? THEME.danger : THEME.accent} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1.6fr", gap: "24px" }}>
-          <div style={cardStyle}>
-            <h4 style={titleStyle}>Geospatial Attribution</h4>
-            <MapChart attackIps={data.ips} />
-          </div>
-          <div style={cardStyle}>
-            <h4 style={titleStyle}>Heuristic Live Stream</h4>
-            <LiveFeed live={true} />
-          </div>
-        </div>
-
-        <div style={cardStyle}>
-          <h4 style={titleStyle}>Top Malicious Sources</h4>
-          <TopAttackersTable ips={data.ips} />
-        </div>
-      </div>
+    const avg = Math.round(
+      data.ips.reduce((a,b)=>a+(b.abuseScore||0),0)/(data.ips.length||1)
     );
-  };
 
-  const renderPage = () => {
-    switch (activeTab) {
-      case "Overview": return <OverviewContent />;
-      case "Reports": return (
-        <div style={cardStyle}>
-          <h4 style={titleStyle}>Security Reports Archive</h4>
-          {["Daily_Audit_Log.pdf", "Threat_Heuristics_April.csv"].map(file => (
-            <div key={file} style={{ padding: "15px", borderBottom: `1px solid ${THEME.border}`, display: "flex", justifyContent: "space-between" }}>
-              <span>{file}</span>
-              <span style={{ color: THEME.accent, cursor: "pointer" }}>DOWNLOAD</span>
-            </div>
-          ))}
-        </div>
-      );
-      default: return <div style={{ color: "white" }}>Module {activeTab} Initializing...</div>;
+    doc.setTextColor(255);
+    doc.text(`Risk Score: ${avg}%`, 14, 40);
+
+    doc.text(
+      `Detected ${data.threats} threats across ${data.total} logs.
+Environment risk is ${avg > 70 ? "HIGH" : avg > 40 ? "MEDIUM" : "LOW"}.
+Immediate monitoring recommended.`,
+      14, 60
+    );
+
+    // PAGE 2 (Charts)
+    doc.addPage();
+
+    const chart = document.querySelector(".recharts-wrapper");
+    if (chart) {
+      const canvas = await html2canvas(chart);
+      doc.addImage(canvas.toDataURL(), "PNG", 10, 20, 180, 80);
     }
+
+    const map = document.querySelector("#map-container");
+    if (map) {
+      const canvas = await html2canvas(map);
+      doc.addImage(canvas.toDataURL(), "PNG", 10, 110, 180, 80);
+    }
+
+    // PAGE 3 (Table)
+    doc.addPage();
+
+    autoTable(doc, {
+      startY: 20,
+      head: [["IP", "Score", "Country", "Severity"]],
+      body: data.ips.map(i => [
+        i.ip,
+        i.abuseScore,
+        i.country,
+        i.severity || "low"
+      ])
+    });
+
+    doc.save("loglens_report.pdf");
   };
 
   return (
-    <div style={{ display: "flex", background: THEME.bg, minHeight: "100vh", color: "white", fontFamily: "monospace" }}>
-      <div style={{ width: "280px", background: THEME.surface, borderRight: `1px solid ${THEME.border}`, padding: "40px 24px", height: "100vh", position: "sticky", top: 0 }}>
-        <h2 style={{ color: THEME.accent, marginBottom: "50px" }}>LOGLENS</h2>
-        <nav style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {["Overview", "Incident Response", "Threat Intel", "Reports", "Settings"].map((item) => (
-            <div key={item} onClick={() => setActiveTab(item)} style={{ padding: "14px", color: activeTab === item ? THEME.accent : THEME.text, background: activeTab === item ? "#12232e" : "transparent", borderRadius: "8px", cursor: "pointer" }}>
-              {item}
-            </div>
-          ))}
-        </nav>
+    <div style={{ display:"flex", minHeight:"100vh", background:THEME.bg, color:"white" }}>
+      
+      <ToastContainer theme="dark"/>
+
+      {/* SIDEBAR */}
+      <div style={{ width:220, padding:20, background:"#111" }}>
+        <h2 style={{ color:THEME.accent }}>LOGLENS</h2>
+        <p style={{ color:THEME.text }}>Overview</p>
+        <p style={{ color:THEME.text }}>Intel</p>
+        <p style={{ color:THEME.text }}>Reports</p>
       </div>
 
-      <div style={{ flex: 1, padding: "40px" }}>
-        <header style={{ display: "flex", justifyContent: "space-between", marginBottom: "40px" }}>
+      {/* MAIN */}
+      <div style={{ flex:1, padding:30 }}>
+
+        {/* TOP BAR */}
+        <div style={{ display:"flex", justifyContent:"space-between" }}>
+          <h1>Overview</h1>
+
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={handleDemo}>DEMO</button>
+
+            <input type="file" hidden ref={fileInputRef} onChange={handleUpload}/>
+            <button onClick={()=>fileInputRef.current.click()}>
+              {isProcessing ? "ANALYZING..." : "UPLOAD"}
+            </button>
+
+            <button onClick={exportToPDF}>PDF</button>
+          </div>
+        </div>
+
+        {!data ? (
+          <div style={{ textAlign:"center", marginTop:100 }}>
+            <h2 style={{ color:THEME.accent }}>ENGINE OFFLINE</h2>
+          </div>
+        ) : (
+
           <div>
-            <h1>{activeTab}</h1>
-            {isProcessing && <p style={{ color: "#4ade80" }}>⚡ Processing Stream...</p>}
+
+            {/* CARDS */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:20 }}>
+              {[
+                { label:"EVENTS", value:data.total, color:THEME.accent },
+                { label:"THREATS", value:data.threats, color:THEME.danger },
+                { label:"BLOCKED", value:blockedIPs.length, color:THEME.success },
+                { label:"RISK", value:"HIGH", color:"purple" }
+              ].map((c,i)=>(
+                <motion.div key={i}
+                  whileHover={{ scale:1.05 }}
+                  style={{
+                    background:THEME.card,
+                    padding:20,
+                    borderLeft:`4px solid ${c.color}`
+                  }}>
+                  <p>{c.label}</p>
+                  <h2>{c.value}</h2>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* CHART */}
+            <div style={{ marginTop:30 }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={data.ips}>
+                  <Area dataKey="abuseScore" stroke={THEME.accent} fill={THEME.accent}/>
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* MAP + LIVE */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginTop:30 }}>
+              <div id="map-container"><MapChart data={data.ips}/></div>
+              <LiveFeed/>
+            </div>
+
+            {/* TABLE */}
+            <table style={{ width:"100%", marginTop:30 }}>
+              <thead>
+                <tr>
+                  <th>IP</th><th>Score</th><th>Country</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.ips.map((ip,i)=>(
+                  <tr key={i}>
+                    <td>{ip.ip}</td>
+                    <td>{ip.abuseScore}</td>
+                    <td>{ip.country}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
           </div>
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button onClick={handleDemo} style={{ ...btnStyle, background: "transparent", border: `1px solid ${THEME.accent}`, color: THEME.accent }}>DEMO</button>
-            <label style={btnStyle}>UPLOAD <input type="file" hidden onChange={handleUpload}/></label>
-            <button onClick={() => exportToPDF(data)} style={{ ...btnStyle, background: "transparent", border: `1px solid ${THEME.border}`, color: "white" }}>PDF</button>
-          </div>
-        </header>
-        {renderPage()}
+        )}
       </div>
     </div>
   );
