@@ -8,7 +8,9 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.15.0",
+    "cors": "^2.8.6",
     "d3": "^7.9.0",
+    "dotenv": "^17.4.2",
     "framer-motion": "^12.38.0",
     "geoip-lite": "^2.0.1",
     "jspdf": "^4.2.1",
@@ -21,6 +23,7 @@
     "react-simple-maps": "^3.0.0",
     "react-toastify": "^11.1.0",
     "recharts": "^3.8.1",
+    "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "web-vitals": "^2.1.4"
   },
