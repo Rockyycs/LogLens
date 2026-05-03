@@ -8,7 +8,7 @@ import io from "socket.io-client";
 import MapChart from "./MapChart";
 import LiveFeed from "./LiveFeed";
 
-const socket = io("http://localhost:5000");
+const socket = io("https://loglens-c3ws.onrender.com");
 
 const THEME = {
   bg: '#0a0b10',

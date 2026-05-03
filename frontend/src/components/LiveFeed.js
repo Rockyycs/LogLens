@@ -13,7 +13,7 @@ function LiveFeed({ live }) {
 
     const fetchLogs = async () => {
       try {
-        const res = await fetch("http://localhost:5000/live-logs");
+        const res = await fetch("https://loglens-c3ws.onrender.com/live-logs");
         const data = await res.json();
         if (Array.isArray(data)) {
           setLogs(data);
