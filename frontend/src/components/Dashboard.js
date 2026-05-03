@@ -61,10 +61,10 @@ const Dashboard = ({ data, setData }) => {
     setIsProcessing(true);
 
     const formData = new FormData();
-    formData.append("file", file); // ✅ FIXED
+    formData.append("logfile", file); // ✅ FIXED
 
     try {
-      const res = await fetch(`${API_BASE_URL}/analyze`, { // ✅ FIXED
+      const res = await fetch(`${API_BASE_URL}/upload`, { // ✅ FIXED
         method: "POST",
         body: formData,
       });
