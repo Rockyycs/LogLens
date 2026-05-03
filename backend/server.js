@@ -18,7 +18,6 @@ const ABUSE_IPDB_KEY = "4241a4c973943dc551bd9e1578248be113ef61e4952bb53d849bd1d6
 const BANNED_COUNTRIES = ['CN', 'RU', 'KP']; 
 const app = express();
 
-// Use Render's LOG_FILE path if it exists, otherwise null to prevent crashes
 const LOG_FILE = fs.existsSync("/var/log/auth.log") ? "/var/log/auth.log" : null; 
 const BLOCKED_IPS_FILE = "./blocked_ips.json";
 const JWT_SECRET = "your_super_secret_loglens_key"; 
@@ -52,7 +51,6 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Setup Multi-part form handling for uploads
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
 const upload = multer({ dest: "uploads/" });
@@ -148,7 +146,6 @@ function parseLine(line) {
 function blockIP(ip) {
     if (ip === '127.0.0.1' || ip === 'localhost' || !ip) return;
     
-    // Cloud environments (Render) don't allow iptables/sudo
     if (process.env.NODE_ENV === 'production') {
         console.log(`☁️ CLOUD_MODE: Logging block for ${ip} (iptables skipped)`);
         saveBlockedIP(ip);
@@ -215,15 +212,12 @@ const processThreat = async (parsedData) => {
         await threat.save();
 
         if (parsedData.severity === "high") {
-            const title = `🚨 LogLens Alert: ${parsedData.type}`;
-            const body = `IP: ${parsedData.ip} (${parsedData.country})\nScore: ${score}%\nStatus: BLOCKED`;
-
-            // Only run desktop notifications if NOT on Render
             if (process.env.NODE_ENV !== 'production') {
+                const title = `🚨 LogLens Alert: ${parsedData.type}`;
+                const body = `IP: ${parsedData.ip} (${parsedData.country})\nScore: ${score}%\nStatus: BLOCKED`;
                 exec(`notify-send -u critical -i security-high "${title}" "${body}"`);
                 exec(`paplay /usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga`);
             }
-
             blockIP(parsedData.ip);
         }
 
@@ -286,16 +280,25 @@ app.get("/demo", async (req, res) => {
     }
 });
 
-app.post("/upload", upload.single("logfile"), (req, res) => {
+// --- UPDATED UPLOAD ROUTE ---
+app.post("/upload", upload.single("logfile"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    
     const filePath = path.resolve(req.file.path);
-    const rl = readline.createInterface({ input: fs.createReadStream(filePath) });
-    rl.on("line", (line) => {
+    const fileStream = fs.createReadStream(filePath);
+    const rl = readline.createInterface({ input: fileStream });
+
+    console.log("📂 File received, starting analysis...");
+
+    for await (const line of rl) {
         const parsed = parseLine(line);
-        if (parsed) processThreat(parsed);
-    });
-    rl.on("close", () => { fs.unlinkSync(filePath); });
-    res.json({ success: true, message: "Log processing started!" });
+        if (parsed) {
+            await processThreat(parsed); 
+        }
+    }
+
+    fs.unlinkSync(filePath); 
+    res.json({ success: true, message: "Analysis Complete!" });
 });
 
 app.post("/api/login", (req, res) => {
