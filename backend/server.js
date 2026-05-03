@@ -28,9 +28,9 @@ const JWT_SECRET = "your_super_secret_loglens_key";
 const CLF_REGEX = /^(\S+) \S+ \S+ \[([\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\S+)?" (\d{3}) (\d+|-)/;
 
 // NOW YOU CAN USE 'server' HERE
-const io = new Server(server, {
+const io = require("socket.io")(server, {
   cors: {
-    origin: ["https://log-lens-p4a434btw-rockyycs-projects-3b259ed7.vercel.app", "http://localhost:3000"],
+    origin: "https://log-lens-jgq8thdou-rockyycs-projects-3b259ed7.vercel.app",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -45,11 +45,16 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/loglens')
     console.error("❌ DATABASE_CONNECTION_ERROR", err);
   });
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://log-lens-jgq8thdou-rockyycs-projects-3b259ed7.vercel.app' // Your Vercel URL from screenshot
+];
+
 // --- MIDDLEWARE ---
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: "https://log-lens-jgq8thdou-rockyycs-projects-3b259ed7.vercel.app", // EXACTLY as it appears in your console error
+  methods: ["GET", "POST"],
+  credentials: true
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -294,15 +299,33 @@ app.post("/upload", upload.single("logfile"), async (req, res) => {
 
     console.log("📂 File received, starting analysis...");
 
+    // --- NEW: Create an object to hold the summary ---
+    let totalEvents = 0;
+    let threatList = [];
+    let severityCounts = { high: 0, medium: 0, low: 0 };
+
     for await (const line of rl) {
+        totalEvents++;
         const parsed = parseLine(line);
         if (parsed) {
             await processThreat(parsed); 
+            threatList.push(parsed); // Save the threat to send to frontend
+            
+            // Count severities for the Bar Chart
+            const sev = parsed.severity?.toLowerCase() || 'low';
+            if (severityCounts[sev] !== undefined) severityCounts[sev]++;
         }
     }
 
     fs.unlinkSync(filePath); 
-    res.json({ success: true, message: "Analysis Complete!" });
+
+    // --- CRITICAL: Send the ACTUAL DATA back to the frontend ---
+    res.json({ 
+        total: totalEvents,
+        threats: threatList.length,
+        ips: threatList, // This populates your "Threat Intelligence Database" table
+        sev_data: severityCounts // This populates your "Severity Balance" chart
+    });
 });
 
 app.post("/api/login", (req, res) => {
