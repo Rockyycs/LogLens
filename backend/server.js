@@ -30,8 +30,13 @@ const CLF_REGEX = /^(\S+) \S+ \S+ \[([\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\
 // NOW YOU CAN USE 'server' HERE
 const io = require("socket.io")(server, {
   cors: {
-    origin: "https://log-lens-pl28rs9qg-rockyycs-projects-3b259ed7.vercel.app",
-    methods: ["GET", "POST"]
+    origin: (origin, callback) => {
+      if (!origin || origin.includes("vercel.app")) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS blocked"));
+      }
+    }
   }
 });
 
@@ -51,11 +56,13 @@ const allowedOrigins = [
 
 // --- MIDDLEWARE ---
 app.use(cors({
-  origin: [
-    "https://log-lens-pl28rs9qg-rockyycs-projects-3b259ed7.vercel.app"
-  ],
-  methods: ["GET", "POST"],
-  credentials: true
+  origin: (origin, callback) => {
+    if (!origin || origin.includes("vercel.app")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  }
 }));
 
 app.use(express.json({ limit: '50mb' }));
