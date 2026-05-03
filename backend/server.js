@@ -30,9 +30,8 @@ const CLF_REGEX = /^(\S+) \S+ \S+ \[([\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\
 // NOW YOU CAN USE 'server' HERE
 const io = require("socket.io")(server, {
   cors: {
-    origin: "https://log-lens-jgq8thdou-rockyycs-projects-3b259ed7.vercel.app",
-    methods: ["GET", "POST"],
-    credentials: true
+    origin: "https://log-lens-pl28rs9qg-rockyycs-projects-3b259ed7.vercel.app",
+    methods: ["GET", "POST"]
   }
 });
 
@@ -52,7 +51,9 @@ const allowedOrigins = [
 
 // --- MIDDLEWARE ---
 app.use(cors({
-  origin: "https://log-lens-jgq8thdou-rockyycs-projects-3b259ed7.vercel.app", // EXACTLY as it appears in your console error
+  origin: [
+    "https://log-lens-pl28rs9qg-rockyycs-projects-3b259ed7.vercel.app"
+  ],
   methods: ["GET", "POST"],
   credentials: true
 }));
