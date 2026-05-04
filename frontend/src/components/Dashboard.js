@@ -116,32 +116,42 @@ const Dashboard = () => {
 
 
 const handleUpload = async (e) => {
+
   if (!e.target.files[0]) return;
+
   setIsProcessing(true);
+
   const file = e.target.files[0];
+
   const formData = new FormData();
+
   formData.append("logfile", file);
 
 
-try {
+
+  try {
+
     const res = await fetch("https://loglens-c3ws.onrender.com/upload", { 
+
       method: "POST", 
+
       body: formData 
+
     });
-    
-    if (!res.ok) throw new Error("Upload failed");
+
     const result = await res.json();
 
-    // 🔥 CRITICAL: Update the state so the dashboard appears
-    setData(result);       // Put the server data into state
-    setIsLive(true);      // Tell React to show the charts
-    setIsProcessing(false); // Stop the "Processing Stream" message
 
-  } catch (err) {
-    console.error("Upload error:", err);
-    setIsProcessing(false);
-    alert("Connection to Render failed.");
-  }
+
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+
+      const rawContent = event.target.result;
+
+      const content = rawContent.toUpperCase();
+
+
       // 1. Detection Logic
       const patterns = {
         "BRUTE_FORCE": (content.match(/FAILED|LOGIN|AUTH|PASSWORD/g) || []).length,
