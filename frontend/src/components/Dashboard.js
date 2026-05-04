@@ -120,7 +120,7 @@ const handleUpload = async (e) => {
   setIsProcessing(true);
   const file = e.target.files[0];
   const formData = new FormData();
-  formData.append("logfile", file);
+  formData.append("file", file);
 
   try {
     const res = await fetch("https://loglens-c3ws.onrender.com/upload", { 
@@ -131,10 +131,15 @@ const handleUpload = async (e) => {
     if (!res.ok) throw new Error("Upload failed");
     const result = await res.json();
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const rawContent = event.target.result;
-      const content = rawContent.toUpperCase();
+const reader = new FileReader();
+
+reader.onload = (event) => {
+  const rawContent = event.target.result;
+  const content = rawContent.toUpperCase();
+  // your logic
+};
+
+reader.readAsText(file); // 🔥 MUST ADD THIS
 
       const patterns = {
         "BRUTE_FORCE": (content.match(/FAILED|LOGIN|AUTH|PASSWORD/g) || []).length,
