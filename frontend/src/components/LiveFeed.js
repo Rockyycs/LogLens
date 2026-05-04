@@ -1,70 +1,88 @@
 import React, { useEffect, useState, useRef } from "react";
 
-function LiveFeed({ live }) {
+function LiveFeed({ live, customLogs }) {
   const [logs, setLogs] = useState([]);
-  const feedEndRef = useRef(null); // Reference for auto-scroll
+  const containerRef = useRef(null);
 
+  // Manual scroll function that stays inside the box
   const scrollToBottom = () => {
-    feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (containerRef.current) {
+      const { scrollHeight, clientHeight } = containerRef.current;
+      // We set the scrollTop of the DIV, which doesn't move the Browser Window
+      containerRef.current.scrollTop = scrollHeight - clientHeight;
+    }
   };
 
   useEffect(() => {
-    if (!live) return;
+    if (customLogs && customLogs.length > 0) {
+      setLogs(customLogs);
+    }
+  }, [customLogs]);
 
-    const fetchLogs = async () => {
-      try {
-        const res = await fetch("https://loglens-c3ws.onrender.com/live-logs");
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setLogs(data);
-        }
-      } catch (err) {
-        console.error("Live logs error:", err);
-      }
-    };
-
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 2000);
-    return () => clearInterval(interval);
-  }, [live]);
-
-  // Trigger scroll whenever logs update
   useEffect(() => {
+    // Only auto-scroll if the user isn't trying to read something (optional)
+    // For now, this will keep it at the bottom without jumping the page
     scrollToBottom();
   }, [logs]);
 
   return (
-    <div style={{
-      background: "#020617",
-      padding: "20px",
-      borderRadius: "12px",
-      border: "1px solid rgba(34, 197, 94, 0.2)",
-      height: "300px",
-      overflowY: "auto",
-      fontFamily: "'Fira Code', monospace",
-      fontSize: "0.85rem",
-      position: "relative"
-    }}>
-      <div style={{ position: "sticky", top: 0, background: "#020617", paddingBottom: "10px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.05)", marginBottom: "15px" }}>
-        <span style={{ color: "#22c55e" }}>root@loglens:~# tail -f /var/log/attacks</span>
-        <span style={{ color: live ? "#22c55e" : "#ef4444", fontSize: "0.7rem" }}>
+    <div 
+      ref={containerRef}
+      style={{
+        background: "#0a0b10", 
+        padding: "20px",
+        borderRadius: "12px",
+        border: "1px solid rgba(255, 255, 255, 0.1)",
+        height: "350px",        // Fixed height
+        overflowY: "auto",      // Scrollable
+        overflowAnchor: "none", // CRITICAL: Stops browser from jumping the page
+        fontFamily: "'Fira Code', monospace",
+        fontSize: "0.8rem",
+        position: "relative",
+        scrollbarWidth: "thin",
+        scrollbarColor: "#1e293b transparent"
+      }}
+    >
+      {/* Terminal Header */}
+      <div style={{ 
+        position: "sticky", 
+        top: 0, 
+        background: "#0a0b10", 
+        paddingBottom: "10px", 
+        display: "flex", 
+        justifyContent: "space-between", 
+        borderBottom: "1px solid rgba(255,255,255,0.05)", 
+        marginBottom: "15px",
+        zIndex: 10
+      }}>
+        <span style={{ color: "#4ade80" }}>root@loglens:~# tail -f /var/log/attacks</span>
+        <span style={{ color: live ? "#4ade80" : "#ef4444", fontSize: "0.75rem", fontWeight: "bold" }}>
           {live ? "● LIVE" : "○ PAUSED"}
         </span>
       </div>
 
-      {(Array.isArray(logs) ? logs : []).map((log, i) => (
-        <div key={i} style={{ marginBottom: "8px", borderLeft: `2px solid ${log.severity === 'high' ? '#ef4444' : '#38bdf8'}`, paddingLeft: "10px" }}>
-          <span style={{ color: "#64748b" }}>[{new Date().toLocaleTimeString()}]</span>
-          <span style={{ color: "#f8fafc" }}> src=</span><span style={{ color: "#38bdf8" }}>{log.ip}</span>
-          <span style={{ color: "#f8fafc" }}> event=</span><span style={{ color: log.severity === 'high' ? '#ef4444' : '#fbbf24' }}>{log.threat || "Unknown"}</span>
-          <span style={{ color: "#64748b", fontSize: "0.75rem" }}> sev={log.severity}</span>
+      {/* Log Entries */}
+      {logs.map((log, i) => (
+        <div key={i} style={{ 
+          display: "flex", 
+          alignItems: "center",
+          marginBottom: "6px", 
+          borderLeft: `2px solid ${log.severity === 'high' ? '#ff4d4d' : '#00f2ff'}`, 
+          paddingLeft: "12px",
+          lineHeight: "1.4"
+        }}>
+          <span style={{ color: "#6e7681", marginRight: "8px" }}>
+            [{log.time || "20:22:00"}]
+          </span>
+          <span style={{ color: "#ffffff" }}>src=</span>
+          <span style={{ color: "#00f2ff", marginRight: "8px" }}>{log.ip || "0.0.0.0"}</span>
+          <span style={{ color: "#ffffff" }}>event=</span>
+          <span style={{ color: "#f0883e", marginRight: "8px" }}>{log.threat || "Unknown"}</span>
+          <span style={{ color: "#8b949e", fontSize: "0.75rem", marginLeft: "auto" }}>
+            sev={log.severity || "low"}
+          </span>
         </div>
       ))}
-
-      {/* This empty div marks the bottom of the list */}
-      <div ref={feedEndRef} />
-
-      {logs.length === 0 && <div style={{ color: "#475569", textAlign: "center", marginTop: "50px" }}>Awaiting incoming packets...</div>}
     </div>
   );
 }
