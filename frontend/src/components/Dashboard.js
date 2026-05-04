@@ -116,43 +116,26 @@ const Dashboard = () => {
 
 
 const handleUpload = async (e) => {
-
   if (!e.target.files[0]) return;
-
   setIsProcessing(true);
-
   const file = e.target.files[0];
-
   const formData = new FormData();
-
   formData.append("logfile", file);
 
-
-
   try {
-
     const res = await fetch("https://loglens-c3ws.onrender.com/upload", { 
-
       method: "POST", 
-
       body: formData 
-
     });
-
+    
+    if (!res.ok) throw new Error("Upload failed");
     const result = await res.json();
 
-
-
     const reader = new FileReader();
-
     reader.onload = (event) => {
-
       const rawContent = event.target.result;
-
       const content = rawContent.toUpperCase();
 
-
-      // 1. Detection Logic
       const patterns = {
         "BRUTE_FORCE": (content.match(/FAILED|LOGIN|AUTH|PASSWORD/g) || []).length,
         "SQL_INJECTION": (content.match(/SELECT|UNION|INSERT|DROP|' OR '/g) || []).length,
@@ -163,9 +146,8 @@ const handleUpload = async (e) => {
       const topVector = Object.keys(patterns).reduce((a, b) => patterns[a] > patterns[b] ? a : b);
       const detectedVector = patterns[topVector] > 0 ? topVector : "NETWORK_SCAN";
 
-      // 2. Prepare the static dashboard data
-      let newSevData = { high: 0, medium: 0, low: 0 };
       const totalEvents = result.total || 5;
+      let newSevData = { high: 0, medium: 0, low: 0 };
 
       if (detectedVector === "SQL_INJECTION" || detectedVector === "EXPLOIT") {
         newSevData = { high: Math.floor(totalEvents * 0.7), medium: Math.floor(totalEvents * 0.2), low: Math.floor(totalEvents * 0.1) };
@@ -175,12 +157,29 @@ const handleUpload = async (e) => {
         newSevData = { high: 1, medium: 1, low: totalEvents - 2 };
       }
 
-      const finalTimeline = (result.timeline && result.timeline.length > 0) ? result.timeline : [
-        { time: "12:00", val: Math.floor(totalEvents * 0.2) },
-        { time: "13:00", val: Math.floor(totalEvents * 0.5) },
-        { time: "14:00", val: Math.floor(totalEvents * 0.8) },
-        { time: "15:00", val: totalEvents }
-      ];
+      setData({
+        ...result,
+        sev_data: newSevData,
+        top: detectedVector,
+        timeline: (result.timeline && result.timeline.length > 0) ? result.timeline : [
+          { time: "12:00", val: Math.floor(totalEvents * 0.2) },
+          { time: "13:00", val: Math.floor(totalEvents * 0.5) },
+          { time: "14:00", val: Math.floor(totalEvents * 0.8) },
+          { time: "15:00", val: totalEvents }
+        ]
+      });
+
+      setIsLive(true);
+      setIsProcessing(false);
+    };
+
+    reader.readAsText(file);
+
+  } catch (err) {
+    console.error("Upload error:", err);
+    setIsProcessing(false);
+  }
+};
 
       // Initial Update for Charts
       setData(prev => ({ 
