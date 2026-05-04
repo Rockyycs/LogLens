@@ -123,7 +123,7 @@ const handleUpload = async (e) => {
   formData.append("logfile", file);
 
   try {
-    const res = await fetch(process.env.REACT_APP_API + "/upload", { 
+    const res = await fetch("https://loglens-c3ws.onrender.com/upload", { 
       method: "POST", 
       body: formData 
     });
